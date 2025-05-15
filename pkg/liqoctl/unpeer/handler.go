@@ -38,6 +38,7 @@ type Options struct {
 	Timeout         time.Duration
 	Wait            bool
 	DeleteNamespace bool
+	Force           bool
 
 	consumerClusterID liqov1beta1.ClusterID
 	providerClusterID liqov1beta1.ClusterID
@@ -57,6 +58,16 @@ func (o *Options) RunUnpeer(ctx context.Context) error {
 
 	ctx, cancel := context.WithTimeout(ctx, o.Timeout)
 	defer cancel()
+
+	if o.Force {
+		if err := o.unpeerConsumerClusterOnly(ctx); err != nil {
+			return err
+		} else {
+			return nil
+		}
+	}
+
+	fmt.Print("dopo il force")
 
 	// To ease the experience for most users, we disable the namespace and remote-namespace flags
 	// so that resources are created according to the default Liqo logic.

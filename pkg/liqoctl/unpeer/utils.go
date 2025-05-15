@@ -16,6 +16,7 @@ package unpeer
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -25,6 +26,7 @@ import (
 	"github.com/liqotech/liqo/pkg/consts"
 	"github.com/liqotech/liqo/pkg/liqoctl/factory"
 	"github.com/liqotech/liqo/pkg/liqoctl/output"
+	"github.com/liqotech/liqo/pkg/liqoctl/unauthenticate"
 	"github.com/liqotech/liqo/pkg/liqoctl/wait"
 	"github.com/liqotech/liqo/pkg/utils/getters"
 )
@@ -98,5 +100,58 @@ func deleteVirtualNodesByClusterID(ctx context.Context, f *factory.Factory,
 		}
 	}
 
+	return nil
+}
+
+func (o *Options) unpeerConsumerClusterOnly(ctx context.Context) error {
+
+	// Disabilita offloading (ResourceSlices + VirtualNodes)
+	if err := o.disableOffloading(ctx); err != nil {
+		o.LocalFactory.Printer.CheckErr(fmt.Errorf("unable to disable offloading: %w", err))
+		return err
+	}
+
+	// Disabilita networking (solo lato consumer)
+	if err := o.disableNetworking(ctx); err != nil {
+		o.LocalFactory.Printer.CheckErr(fmt.Errorf("unable to disable networking: %w", err))
+		return err
+	}
+
+	// Rimuove il ForeignCluster locale associato al provider
+	fcList := &liqov1beta1.ForeignClusterList{}
+	if err := o.LocalFactory.CRClient.List(ctx, fcList); err != nil {
+		o.LocalFactory.Printer.CheckErr(fmt.Errorf("unable to get foreignCluster: %w", err))
+		return err
+	}
+
+	found := false
+	for i := range fcList.Items {
+		if fcList.Items[i].Spec.ClusterID == o.providerClusterID {
+			fc := &fcList.Items[i]
+			o.LocalFactory.Printer.Verbosef("Eliminazione del ForeignCluster locale %q...\n", fc.Name)
+			if err := o.LocalFactory.CRClient.Delete(ctx, fc); err != nil {
+				// fmt.Errorf("errore nella cancellazione del ForeignCluster %q: %w", fc.Name, err)
+				o.LocalFactory.Printer.CheckErr(fmt.Errorf("unable to delete foreignCluster%q: %w", fc.Name, err))
+				return err
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		o.LocalFactory.Printer.Verbosef(" Nessun ForeignCluster con ID %q trovato nel cluster locale.\n", o.providerClusterID)
+	}
+
+	// Elimina il tenant namespace se richiesto
+	if o.DeleteNamespace {
+		consumer := unauthenticate.NewCluster(o.LocalFactory)
+		if err := consumer.DeleteTenantNamespace(ctx, o.providerClusterID, o.Wait); err != nil {
+			// o.LocalFactory.Printer.Warningf("⚠️  Errore nella cancellazione del tenant namespace: %v\n", err)
+			o.LocalFactory.Printer.CheckErr(fmt.Errorf("unable to delete tenant namespace: %v", err))
+			return err
+		}
+	}
+
+	o.LocalFactory.Printer.Verbosef("✅ Unpeering lato consumer completato con successo.")
 	return nil
 }

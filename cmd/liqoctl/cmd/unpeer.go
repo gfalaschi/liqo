@@ -67,6 +67,7 @@ func newUnpeerCommand(ctx context.Context, f *factory.Factory) *cobra.Command {
 	cmd.PersistentFlags().DurationVar(&options.Timeout, "timeout", 120*time.Second, "Timeout for unpeering completion")
 	cmd.PersistentFlags().BoolVar(&options.Wait, "wait", true, "Wait for resource to be deleted before returning")
 	cmd.PersistentFlags().BoolVar(&options.DeleteNamespace, "delete-namespaces", false, "Delete the tenant namespace after unpeering")
+	cmd.PersistentFlags().BoolVar(&options.Force, "force", false, "Force unpeering only on the local cluster even if the remote cluster is unreachable")
 
 	options.LocalFactory.AddFlags(cmd.PersistentFlags(), cmd.RegisterFlagCompletionFunc)
 	options.RemoteFactory.AddFlags(cmd.PersistentFlags(), cmd.RegisterFlagCompletionFunc)
